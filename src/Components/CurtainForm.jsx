@@ -264,7 +264,12 @@ const CurtainForm = ({ customerData }) => {
         Date: customerData.date,
         Address: customerData.address,
       },
-      Total_Price: calculateFinalTotal(), // Changed from totalPrice to include VAT and discount
+      Price_Details: {
+        Subtotal: calculateTotalCost(),
+        VAT: calculateVAT(),
+        Discount: parseFloat(discount) || 0,
+        Final_Total: calculateFinalTotal(),
+      },
       Room: rooms.map((room) => ({
         Room_Id: uuidv4(),
         Room_Name: room.room === "Other" ? room.customRoom : room.room,
