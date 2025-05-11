@@ -3,9 +3,20 @@ import { v4 as uuidv4 } from "uuid";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 import autoTable from "jspdf-autotable";
+import Swal from "sweetalert2";
 import { PlusCircle, Trash2, Loader2, Printer, Download, Send } from "lucide-react";
+import leftimage from "../../src/images/leftimage.jpg";
 
-const CurtainForm = ({ customerData }) => {
+const CurtainForm = () => {
+  // Customer Info State
+  const [customerData, setCustomerData] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    date: "",
+    address: "",
+  });
+
   const [rooms, setRooms] = useState([
     {
       id: Date.now(),
@@ -33,8 +44,7 @@ const CurtainForm = ({ customerData }) => {
       ],
     },
   ]);
-  const [discount, setDiscount] = useState(""); // State for discount input
-
+  const [discount, setDiscount] = useState("");
   const [curtainStyles, setCurtainStyles] = useState([]);
   const [curtainFabricCodes, setCurtainFabricCodes] = useState([]);
   const [curtainFabricTypes, setCurtainFabricTypes] = useState([]);
@@ -52,6 +62,15 @@ const CurtainForm = ({ customerData }) => {
     "X-Tadabase-App-Key": "bk9nJWXUemy7",
     "X-Tadabase-App-Secret": "UzbXvsZWbS10hkwzQgErMklUpdUopAhR",
     "Content-Type": "application/json",
+  };
+
+  // Handle Customer Info Input Changes
+  const handleCustomerChange = (e) => {
+    const { name, value } = e.target;
+    setCustomerData({
+      ...customerData,
+      [name]: value,
+    });
   };
 
   useEffect(() => {
@@ -129,9 +148,34 @@ const CurtainForm = ({ customerData }) => {
     if (type === "Accessories") {
       return accessoryItem && unit;
     } else if (type === "Curtains" || type === "Blinds") {
-      return width && heightLeft && heightCenter && heightRight && style && fabricCode && opening && fabricType;
+      return (
+        width &&
+        heightLeft &&
+        heightCenter &&
+        heightRight &&
+        style &&
+        fabricCode &&
+        opening &&
+        fabricType
+      );
     }
     return false;
+  };
+
+  // Validate all required fields (customer and form)
+  const isFormValid = () => {
+    return (
+      customerData.name &&
+      customerData.email &&
+      customerData.phone &&
+      customerData.date &&
+      customerData.address &&
+      rooms.every((room) =>
+        room.items.every(
+          (item) => areRequiredFieldsFilled(item) && item.formData.sellingPrice
+        )
+      )
+    );
   };
 
   const submitRoomData = async (room, item) => {
@@ -211,7 +255,11 @@ const CurtainForm = ({ customerData }) => {
       );
     } catch (error) {
       console.error("Error submitting room data:", error);
-      alert("Failed to fetch selling price. Please try again.");
+      Swal.fire({
+        icon: "error",
+        title: "Error",
+        text: "Failed to fetch selling price. Please try again.",
+      });
     } finally {
       setLoadingPrices((prev) => ({ ...prev, [item.id]: false }));
     }
@@ -220,38 +268,27 @@ const CurtainForm = ({ customerData }) => {
   const submitOrder = async () => {
     setIsSubmitting(true);
 
-    // Validate customer data
-    if (
-      !customerData ||
-      !customerData.name ||
-      !customerData.email ||
-      !customerData.phone ||
-      !customerData.date ||
-      !customerData.address
-    ) {
-      alert("Please complete the customer information before submitting the order.");
-      setIsSubmitting(false);
-      return;
-    }
-
-    // Validate room data
-    const hasValidItems = rooms.every((room) =>
-      room.items.every((item) => areRequiredFieldsFilled(item) && item.formData.sellingPrice)
-    );
-    if (!hasValidItems) {
-      alert("Please ensure all items have required fields filled and prices calculated.");
+    // Validate form
+    if (!isFormValid()) {
+      Swal.fire({
+        icon: "warning",
+        title: "Incomplete Form",
+        text: "Please fill out all required customer information and ensure all items have required fields and prices calculated.",
+      });
       setIsSubmitting(false);
       return;
     }
 
     // Calculate total price
-    const totalPrice = rooms
-      .reduce(
-        (sum, room) =>
-          sum +
-          room.items.reduce((itemSum, item) => itemSum + (parseFloat(item.formData.sellingPrice) || 0), 0),
-        0
-      );
+    const totalPrice = rooms.reduce(
+      (sum, room) =>
+        sum +
+        room.items.reduce(
+          (itemSum, item) => itemSum + (parseFloat(item.formData.sellingPrice) || 0),
+          0
+        ),
+      0
+    );
 
     // Construct payload
     const invoiceId = uuidv4();
@@ -306,8 +343,22 @@ const CurtainForm = ({ customerData }) => {
         throw new Error("Order submission failed");
       }
 
-      alert("Order submitted successfully!");
-      // Reset form
+      Swal.fire({
+        icon: "success",
+        title: "Success",
+        text: "Order submitted successfully!",
+        timer: 2000,
+        showConfirmButton: false,
+      });
+
+      // Reset form and customer data
+      setCustomerData({
+        name: "",
+        email: "",
+        phone: "",
+        date: "",
+        address: "",
+      });
       setRooms([
         {
           id: Date.now(),
@@ -335,10 +386,14 @@ const CurtainForm = ({ customerData }) => {
           ],
         },
       ]);
-      setDiscount(""); // Reset discount on successful submission
+      setDiscount("");
     } catch (error) {
       console.error("Error submitting order:", error);
-      alert("Failed to submit order. Please try again.");
+      Swal.fire({
+        icon: "error",
+        title: "Error",
+        text: "Failed to submit order. Please try again.",
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -347,7 +402,11 @@ const CurtainForm = ({ customerData }) => {
   useEffect(() => {
     rooms.forEach((room) => {
       room.items.forEach((item) => {
-        if (areRequiredFieldsFilled(item) && !item.formData.sellingPrice && !loadingPrices[item.id]) {
+        if (
+          areRequiredFieldsFilled(item) &&
+          !item.formData.sellingPrice &&
+          !loadingPrices[item.id]
+        ) {
           submitRoomData(room, item);
         }
       });
@@ -407,7 +466,8 @@ const CurtainForm = ({ customerData }) => {
                         formData: {
                           ...item.formData,
                           [field]: value,
-                          sellingPrice: field !== "remarks" ? "" : item.formData.sellingPrice,
+                          sellingPrice:
+                            field !== "remarks" ? "" : item.formData.sellingPrice,
                         },
                       }
                   : item
@@ -522,26 +582,25 @@ const CurtainForm = ({ customerData }) => {
     })}`;
   };
 
-  // Calculate room total cost
   const calculateRoomTotal = (room) => {
-    return room.items.reduce((sum, item) => sum + (parseFloat(item.formData.sellingPrice) || 0), 0);
+    return room.items.reduce(
+      (sum, item) => sum + (parseFloat(item.formData.sellingPrice) || 0),
+      0
+    );
   };
 
-  // Calculate overall total cost
   const calculateTotalCost = () => {
     return rooms.reduce((sum, room) => sum + calculateRoomTotal(room), 0);
   };
 
-  // Calculate VAT (5%)
   const calculateVAT = () => {
     return calculateTotalCost() * 0.05;
   };
 
-  // Calculate final total after discount
   const calculateFinalTotal = () => {
     const totalWithVAT = calculateTotalCost() + calculateVAT();
     const discountValue = parseFloat(discount) || 0;
-    return Math.max(0, totalWithVAT - discountValue); // Ensure final total doesn't go negative
+    return Math.max(0, totalWithVAT - discountValue);
   };
 
   const downloadPDF = () => {
@@ -552,7 +611,7 @@ const CurtainForm = ({ customerData }) => {
     let totalSellingPrice = 0;
 
     // Header
-    doc.setFillColor(0, 102, 204); // Blue header
+    doc.setFillColor(0, 102, 204);
     doc.rect(0, 0, pageWidth, 40, "F");
     doc.setFont("Playfair Display", "bold");
     doc.setFontSize(24);
@@ -567,43 +626,43 @@ const CurtainForm = ({ customerData }) => {
     doc.setFontSize(10);
     doc.setTextColor(0, 0, 0);
     doc.text(`Invoice No: INV-${Date.now()}`, 10, yOffset);
-    doc.text(`Date: ${new Date().toLocaleDateString()}`, pageWidth - 10, yOffset, { align: "right" });
+    doc.text(`Date: ${new Date().toLocaleDateString()}`, pageWidth - 10, yOffset, {
+      align: "right",
+    });
     yOffset += 10;
 
     // Customer Information (Table)
-    if (customerData) {
-      doc.setFont("Playfair Display", "bold");
-      doc.setFontSize(14);
-      doc.text("Customer Information", 10, yOffset);
-      yOffset += 7;
+    doc.setFont("Playfair Display", "bold");
+    doc.setFontSize(14);
+    doc.text("Customer Information", 10, yOffset);
+    yOffset += 7;
 
-      const customerTableData = [
-        ["Name", customerData.name || "-"],
-        ["Email", customerData.email || "-"],
-        ["Phone", customerData.phone || "-"],
-        ["Date", customerData.date || "-"],
-        ["Address", customerData.address || "-"],
-      ];
+    const customerTableData = [
+      ["Name", customerData.name || "-"],
+      ["Email", customerData.email || "-"],
+      ["Phone", customerData.phone || "-"],
+      ["Date", customerData.date || "-"],
+      ["Address", customerData.address || "-"],
+    ];
 
-      autoTable(doc, {
-        startY: yOffset,
-        body: customerTableData,
-        theme: "grid",
-        styles: {
-          font: "Open Sans",
-          fontSize: 10,
-          cellPadding: 4,
-          overflow: "linebreak",
-          textColor: [50, 50, 50],
-        },
-        columnStyles: {
-          0: { cellWidth: 40, fontStyle: "bold", fillColor: [240, 240, 240] },
-          1: { cellWidth: 140 },
-        },
-        margin: { left: 10, right: 10 },
-      });
-      yOffset = doc.lastAutoTable.finalY + 10;
-    }
+    autoTable(doc, {
+      startY: yOffset,
+      body: customerTableData,
+      theme: "grid",
+      styles: {
+        font: "Open Sans",
+        fontSize: 10,
+        cellPadding: 4,
+        overflow: "linebreak",
+        textColor: [50, 50, 50],
+      },
+      columnStyles: {
+        0: { cellWidth: 40, fontStyle: "bold", fillColor: [240, 240, 240] },
+        1: { cellWidth: 140 },
+      },
+      margin: { left: 10, right: 10 },
+    });
+    yOffset = doc.lastAutoTable.finalY + 10;
 
     // Separator Line
     doc.setLineWidth(0.5);
@@ -633,7 +692,7 @@ const CurtainForm = ({ customerData }) => {
                 formatPrice(item.formData.sellingPrice),
                 item.formData.remarks || "-",
               ],
-              ["", "", "", "", "", ""], // Empty row for spacing
+              ["", "", "", "", "", ""],
             ]
           : [
               [
@@ -646,9 +705,13 @@ const CurtainForm = ({ customerData }) => {
               ],
               [
                 "",
-                `Fabric: ${item.formData.fabricCode || "-"} / ${item.formData.fabricType || "-"}`,
+                `Fabric: ${item.formData.fabricCode || "-"} / ${
+                  item.formData.fabricType || "-"
+                }`,
                 `Opening: ${item.formData.opening || "-"}`,
-                `Left: ${item.formData.heightLeft || "-"} / Right: ${item.formData.heightRight || "-"}`,
+                `Left: ${item.formData.heightLeft || "-"} / Right: ${
+                  item.formData.heightRight || "-"
+                }`,
                 "",
                 "",
               ],
@@ -701,50 +764,60 @@ const CurtainForm = ({ customerData }) => {
 
     // Total Price
     doc.setFont("Playfair Display", "bold");
-doc.setFontSize(14);
-doc.text("Order Summary", 10, yOffset);
-yOffset += 7;
+    doc.setFontSize(14);
+    doc.text("Order Summary", 10, yOffset);
+    yOffset += 7;
 
-autoTable(doc, {
-  startY: yOffset,
-  body: [
-    ["Subtotal", formatPrice(totalSellingPrice)],
-    ["VAT (5%)", formatPrice(calculateVAT())],
-    ["Discount", formatPrice(parseFloat(discount) || 0)],
-    ["Final Total", formatPrice(calculateFinalTotal())],
-  ],
-  theme: "grid",
-  styles: {
-    font: "Open Sans",
-    fontSize: 12,
-    cellPadding: 5,
-    fontStyle: "bold",
-    halign: "right",
-    textColor: [50, 50, 50],
-  },
-  columnStyles: {
-    0: { cellWidth: 150, fillColor: [240, 240, 240] },
-    1: { cellWidth: 30, halign: "right" },
-  },
-  margin: { left: 10, right: 10 },
-  didParseCell: (data) => {
-    if (data.row.index === 3) { // Final Total row
-      data.cell.styles.textColor = [0, 102, 204]; // Blue color for Final Total
-      data.cell.styles.fontStyle = "bold";
-    }
-  },
-});
+    autoTable(doc, {
+      startY: yOffset,
+      body: [
+        ["Subtotal", formatPrice(totalSellingPrice)],
+        ["VAT (5%)", formatPrice(calculateVAT())],
+        ["Discount", formatPrice(parseFloat(discount) || 0)],
+        ["Final Total", formatPrice(calculateFinalTotal())],
+      ],
+      theme: "grid",
+      styles: {
+        font: "Open Sans",
+        fontSize: 12,
+        cellPadding: 5,
+        fontStyle: "bold",
+        halign: "right",
+        textColor: [50, 50, 50],
+      },
+      columnStyles: {
+        0: { cellWidth: 150, fillColor: [240, 240, 240] },
+        1: { cellWidth: 30, halign: "right" },
+      },
+      margin: { left: 10, right: 10 },
+      didParseCell: (data) => {
+        if (data.row.index === 3) {
+          data.cell.styles.textColor = [0, 102, 204];
+          data.cell.styles.fontStyle = "bold";
+        }
+      },
+    });
 
-yOffset = doc.lastAutoTable.finalY + 20;
+    yOffset = doc.lastAutoTable.finalY + 20;
 
     // Footer
     doc.setFont("Open Sans", "italic");
     doc.setFontSize(10);
     doc.setTextColor(100, 100, 100);
-    doc.text("Thank you for choosing Your Custom Curtain Studio!", pageWidth / 2, yOffset, { align: "center" });
+    doc.text(
+      "Thank you for choosing Your Custom Curtain Studio!",
+      pageWidth / 2,
+      yOffset,
+      { align: "center" }
+    );
     yOffset += 10;
     doc.setFontSize(8);
-    doc.text("Contact us at: support@curtainstudio.com | +1-555-123-4567", pageWidth / 2, yOffset, { align: "center" });
+    doc.text(
+      "Contact us at: support@curtainstudio.com | +1-555-123-4567",
+      pageWidth / 2,
+      yOffset,
+      { align: "center" }
+    );
 
     doc.save("Curtain_Invoice.pdf");
   };
@@ -781,8 +854,87 @@ yOffset = doc.lastAutoTable.finalY + 20;
     default: "bg-gray-50",
   };
 
+  const renderCustomerInfoForm = () => (
+    <div className="w-full mx-auto mt-10 p-6 bg-white rounded-xl shadow-lg border border-gray-200">
+      <h2 className="text-4xl font-heading text-DarkBlue mb-4">
+        Looking for the perfect curtains?
+      </h2>
+      <p className="text-DarkBlue font-body text-sm mb-6">
+        Please fill out the form below with your contact information and curtain
+        preferences. We'll review your details and get back to you with the best
+        options for your space.
+      </p>
+      <div className="flex justify-center">
+        <div className="relative flex-flex-col z-10">
+          {/* <div className="absolute left-[-8px] w-[460px] h-[300px] bg-[#edf4fa] -z-10"></div> */}
+          {/* <img
+            src={leftimage}
+            alt="Left Visual"
+            className="w-[450px] h-[290px] object-cover"
+          /> */}
+        </div>
+        <div className="pl-12 w-full">
+          <div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              <input
+                type="text"
+                name="name"
+                placeholder="Name"
+                value={customerData.name}
+                onChange={handleCustomerChange}
+                className="p-3 bg-[#edf4fa] placeholder-gray-500 text-gray-700 focus:outline-none"
+                required
+              />
+              <input
+                type="email"
+                name="email"
+                placeholder="E-mail"
+                value={customerData.email}
+                onChange={handleCustomerChange}
+                className="p-3 bg-[#edf4fa] placeholder-gray-500 text-gray-700 focus:outline-none"
+                required
+              />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              <input
+                type="tel"
+                name="phone"
+                placeholder="Phone Number"
+                value={customerData.phone}
+                onChange={handleCustomerChange}
+                className="p-3 bg-[#edf4fa] placeholder-gray-500 text-gray-700 focus:outline-none"
+                required
+              />
+              <input
+                type="date"
+                name="date"
+                value={customerData.date}
+                onChange={handleCustomerChange}
+                className="p-3 bg-[#edf4fa] text-gray-700 focus:outline-none"
+                required
+              />
+            </div>
+            <div className="mb-4">
+              <textarea
+                name="address"
+                placeholder="Address"
+                value={customerData.address}
+                onChange={handleCustomerChange}
+                className="w-full p-3 bg-[#edf4fa] placeholder-gray-500 text-gray-700 h-40 resize-none focus:outline-none"
+                required
+              ></textarea>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
   const renderRoomForm = (room) => (
-    <div key={room.id} className="mb-10 p-6 bg-white rounded-xl shadow-lg border border-gray-200">
+    <div
+      key={room.id}
+      className="mb-10 p-6 bg-white rounded-xl shadow-lg border border-gray-200"
+    >
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-bold text-gray-800 font-['Playfair_Display']">
           Room {rooms.indexOf(room) + 1}:{" "}
@@ -861,7 +1013,13 @@ yOffset = doc.lastAutoTable.finalY + 20;
                   .filter(Boolean);
               }
               const availableUnits = item.type === "Accessories"
-                ? [...new Set(accessories.filter((acc) => acc.item === item.formData.item).map((acc) => acc.unit))].filter(Boolean)
+                ? [
+                    ...new Set(
+                      accessories
+                        .filter((acc) => acc.item === item.formData.item)
+                        .map((acc) => acc.unit)
+                    ),
+                  ].filter(Boolean)
                 : [];
 
               const bgColor = TYPE_COLORS[item.type] || TYPE_COLORS.default;
@@ -874,7 +1032,9 @@ yOffset = doc.lastAutoTable.finalY + 20;
                   <td className="px-4 py-4 align-top">
                     <select
                       value={item.type}
-                      onChange={(e) => handleItemChange(room.id, item.id, "type", e.target.value)}
+                      onChange={(e) =>
+                        handleItemChange(room.id, item.id, "type", e.target.value)
+                      }
                       className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors font-['Open_Sans'] text-sm"
                     >
                       <option value="">Select Type</option>
@@ -887,23 +1047,33 @@ yOffset = doc.lastAutoTable.finalY + 20;
                     {item.type === "Accessories" ? (
                       <select
                         value={item.formData.item}
-                        onChange={(e) => handleItemChange(room.id, item.id, "item", e.target.value)}
+                        onChange={(e) =>
+                          handleItemChange(room.id, item.id, "item", e.target.value)
+                        }
                         className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors font-['Open_Sans'] text-sm"
                       >
                         <option value="">Select Item</option>
-                        {[...new Set(accessories.map((acc) => acc.item))].map((accItem) => (
-                          <option key={accItem} value={accItem}>{accItem}</option>
-                        ))}
+                        {[...new Set(accessories.map((acc) => acc.item))].map(
+                          (accItem) => (
+                            <option key={accItem} value={accItem}>
+                              {accItem}
+                            </option>
+                          )
+                        )}
                       </select>
                     ) : (
                       <select
                         value={item.formData.style}
-                        onChange={(e) => handleItemChange(room.id, item.id, "style", e.target.value)}
+                        onChange={(e) =>
+                          handleItemChange(room.id, item.id, "style", e.target.value)
+                        }
                         className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors font-['Open_Sans'] text-sm"
                       >
                         <option value="">Select Style</option>
                         {styles.map((s) => (
-                          <option key={s} value={s}>{s}</option>
+                          <option key={s} value={s}>
+                            {s}
+                          </option>
                         ))}
                       </select>
                     )}
@@ -912,20 +1082,26 @@ yOffset = doc.lastAutoTable.finalY + 20;
                     {item.type === "Accessories" ? (
                       <select
                         value={item.formData.unit}
-                        onChange={(e) => handleItemChange(room.id, item.id, "unit", e.target.value)}
+                        onChange={(e) =>
+                          handleItemChange(room.id, item.id, "unit", e.target.value)
+                        }
                         className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors font-['Open_Sans'] text-sm disabled:bg-gray-200 disabled:cursor-not-allowed"
                         disabled={!item.formData.item}
                       >
                         <option value="">Select Unit</option>
                         {availableUnits.map((unit) => (
-                          <option key={unit} value={unit}>{unit}</option>
+                          <option key={unit} value={unit}>
+                            {unit}
+                          </option>
                         ))}
                       </select>
                     ) : (
                       <input
                         type="text"
                         value={item.formData.width}
-                        onChange={(e) => handleItemChange(room.id, item.id, "width", e.target.value)}
+                        onChange={(e) =>
+                          handleItemChange(room.id, item.id, "width", e.target.value)
+                        }
                         className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors font-['Open_Sans'] text-sm"
                         placeholder="Width (cm)"
                       />
@@ -938,7 +1114,14 @@ yOffset = doc.lastAutoTable.finalY + 20;
                       <input
                         type="text"
                         value={item.formData.heightCenter}
-                        onChange={(e) => handleItemChange(room.id, item.id, "heightCenter", e.target.value)}
+                        onChange={(e) =>
+                          handleItemChange(
+                            room.id,
+                            item.id,
+                            "heightCenter",
+                            e.target.value
+                          )
+                        }
                         className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors font-['Open_Sans'] text-sm"
                         placeholder="Height Center (cm)"
                       />
@@ -980,13 +1163,22 @@ yOffset = doc.lastAutoTable.finalY + 20;
                       {item.type !== "Accessories" && (
                         <select
                           value={item.formData.fabricCode}
-                          onChange={(e) => handleItemChange(room.id, item.id, "fabricCode", e.target.value)}
+                          onChange={(e) =>
+                            handleItemChange(
+                              room.id,
+                              item.id,
+                              "fabricCode",
+                              e.target.value
+                            )
+                          }
                           className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors font-['Open_Sans'] text-sm disabled:bg-gray-200 disabled:cursor-not-allowed"
                           disabled={!item.formData.style && item.type === "Blinds"}
                         >
                           <option value="">Fabric Code</option>
                           {fabricCodes.map((c) => (
-                            <option key={c} value={c}>{c}</option>
+                            <option key={c} value={c}>
+                              {c}
+                            </option>
                           ))}
                         </select>
                       )}
@@ -995,13 +1187,22 @@ yOffset = doc.lastAutoTable.finalY + 20;
                       {item.type !== "Accessories" && (
                         <select
                           value={item.formData.fabricType}
-                          onChange={(e) => handleItemChange(room.id, item.id, "fabricType", e.target.value)}
+                          onChange={(e) =>
+                            handleItemChange(
+                              room.id,
+                              item.id,
+                              "fabricType",
+                              e.target.value
+                            )
+                          }
                           className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors font-['Open_Sans'] text-sm disabled:bg-gray-200 disabled:cursor-not-allowed"
                           disabled={!item.formData.style && item.type === "Blinds"}
                         >
                           <option value="">Fabric Type</option>
                           {fabricTypes.map((f) => (
-                            <option key={f} value={f}>{f}</option>
+                            <option key={f} value={f}>
+                              {f}
+                            </option>
                           ))}
                         </select>
                       )}
@@ -1012,14 +1213,28 @@ yOffset = doc.lastAutoTable.finalY + 20;
                           <input
                             type="text"
                             value={item.formData.heightLeft}
-                            onChange={(e) => handleItemChange(room.id, item.id, "heightLeft", e.target.value)}
+                            onChange={(e) =>
+                              handleItemChange(
+                                room.id,
+                                item.id,
+                                "heightLeft",
+                                e.target.value
+                              )
+                            }
                             className="w-1/2 px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors font-['Open_Sans'] text-sm"
                             placeholder="Height Left (cm)"
                           />
                           <input
                             type="text"
                             value={item.formData.heightRight}
-                            onChange={(e) => handleItemChange(room.id, item.id, "heightRight", e.target.value)}
+                            onChange={(e) =>
+                              handleItemChange(
+                                room.id,
+                                item.id,
+                                "heightRight",
+                                e.target.value
+                              )
+                            }
                             className="w-1/2 px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors font-['Open_Sans'] text-sm"
                             placeholder="Height Right (cm)"
                           />
@@ -1030,12 +1245,21 @@ yOffset = doc.lastAutoTable.finalY + 20;
                       {item.type !== "Accessories" && (
                         <select
                           value={item.formData.opening}
-                          onChange={(e) => handleItemChange(room.id, item.id, "opening", e.target.value)}
+                          onChange={(e) =>
+                            handleItemChange(
+                              room.id,
+                              item.id,
+                              "opening",
+                              e.target.value
+                            )
+                          }
                           className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors font-['Open_Sans'] text-sm"
                         >
                           <option value="">Opening</option>
                           {openings.map((o) => (
-                            <option key={o} value={o}>{o}</option>
+                            <option key={o} value={o}>
+                              {o}
+                            </option>
                           ))}
                         </select>
                       )}
@@ -1044,7 +1268,9 @@ yOffset = doc.lastAutoTable.finalY + 20;
                       <input
                         type="text"
                         value={item.formData.remarks}
-                        onChange={(e) => handleItemChange(room.id, item.id, "remarks", e.target.value)}
+                        onChange={(e) =>
+                          handleItemChange(room.id, item.id, "remarks", e.target.value)
+                        }
                         className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors font-['Open_Sans'] text-sm"
                         placeholder="Remarks"
                       />
@@ -1072,35 +1298,49 @@ yOffset = doc.lastAutoTable.finalY + 20;
   );
 
   return (
-    <div id="curtain-form" className="max-w-6xl mx-auto p-6 bg-gradient-to-r from-blue-50 to-gray-50 min-h-screen">
+    <div
+      id="curtain-form"
+      className="max-w-6xl mx-auto p-6 bg-gradient-to-r from-blue-50 to-gray-50 min-h-screen"
+    >
+      {renderCustomerInfoForm()}
+
       <div className="text-center mb-8">
         <h1 className="text-3xl font-bold text-gray-800 font-['Playfair_Display'] mb-2">
           Curtain Measurement Form
         </h1>
         <p className="text-gray-600 max-w-2xl mx-auto font-['Open_Sans']">
-          Fill out the form below to get accurate measurements and pricing for your custom curtains, blinds, and accessories.
+          Fill out the form below to get accurate measurements and pricing for your
+          custom curtains, blinds, and accessories.
         </p>
       </div>
 
       {rooms.map((room) => renderRoomForm(room))}
 
       <div className="mt-8 p-6 bg-white rounded-xl shadow-lg border border-gray-200">
-        <h2 className="text-2xl font-bold text-gray-800 font-['Playfair_Display'] mb-4">Order Summary</h2>
+        <h2 className="text-2xl font-bold text-gray-800 font-['Playfair_Display'] mb-4">
+          Order Summary
+        </h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="flex flex-col">
-            <label className="text-sm font-medium text-gray-700 mb-1 font-['Open_Sans']">Subtotal</label>
+            <label className="text-sm font-medium text-gray-700 mb-1 font-['Open_Sans']">
+              Subtotal
+            </label>
             <div className="px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg font-['Open_Sans'] text-sm">
               {formatPrice(calculateTotalCost())}
             </div>
           </div>
           <div className="flex flex-col">
-            <label className="text-sm font-medium text-gray-700 mb-1 font-['Open_Sans']">VAT (5%)</label>
+            <label className="text-sm font-medium text-gray-700 mb-1 font-['Open_Sans']">
+              VAT (5%)
+            </label>
             <div className="px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg font-['Open_Sans'] text-sm">
               {formatPrice(calculateVAT())}
             </div>
           </div>
           <div className="flex flex-col">
-            <label className="text-sm font-medium text-gray-700 mb-1 font-['Open_Sans']">Discount ($)</label>
+            <label className="text-sm font-medium text-gray-700 mb-1 font-['Open_Sans']">
+              Discount ($)
+            </label>
             <input
               type="number"
               value={discount}
@@ -1111,7 +1351,9 @@ yOffset = doc.lastAutoTable.finalY + 20;
             />
           </div>
           <div className="flex flex-col">
-            <label className="text-sm font-medium text-gray-700 mb-1 font-['Open_Sans']">Final Total</label>
+            <label className="text-sm font-medium text-gray-700 mb-1 font-['Open_Sans']">
+              Final Total
+            </label>
             <div className="px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg font-['Open_Sans'] text-sm font-semibold text-blue-600">
               {formatPrice(calculateFinalTotal())}
             </div>
@@ -1140,9 +1382,9 @@ yOffset = doc.lastAutoTable.finalY + 20;
         </button>
         <button
           onClick={submitOrder}
-          disabled={isSubmitting}
+          disabled={isSubmitting || !isFormValid()}
           className={`inline-flex items-center px-6 py-3 bg-orange-600 text-white rounded-lg shadow-md hover:bg-orange-700 transition-colors font-['Open_Sans'] text-sm ${
-            isSubmitting ? "opacity-50 cursor-not-allowed" : ""
+            isSubmitting || !isFormValid() ? "opacity-50 cursor-not-allowed" : ""
           }`}
         >
           {isSubmitting ? (
