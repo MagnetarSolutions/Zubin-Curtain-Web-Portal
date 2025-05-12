@@ -603,13 +603,13 @@ const CurtainForm = () => {
     return Math.max(0, totalWithVAT - discountValue);
   };
 
-  const downloadPDF = () => {
+  const generatePDF = () => {
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
     let yOffset = 20;
     let totalSellingPrice = 0;
-
+  
     // Header
     doc.setFillColor(0, 102, 204);
     doc.rect(0, 0, pageWidth, 40, "F");
@@ -620,7 +620,7 @@ const CurtainForm = () => {
     doc.setFontSize(12);
     doc.text("Your Custom Curtain Studio", pageWidth / 2, 33, { align: "center" });
     yOffset += 25;
-
+  
     // Invoice Details
     doc.setFont("Open Sans", "normal");
     doc.setFontSize(10);
@@ -630,13 +630,13 @@ const CurtainForm = () => {
       align: "right",
     });
     yOffset += 10;
-
+  
     // Customer Information (Table)
     doc.setFont("Playfair Display", "bold");
     doc.setFontSize(14);
     doc.text("Customer Information", 10, yOffset);
     yOffset += 7;
-
+  
     const customerTableData = [
       ["Name", customerData.name || "-"],
       ["Email", customerData.email || "-"],
@@ -644,7 +644,7 @@ const CurtainForm = () => {
       ["Date", customerData.date || "-"],
       ["Address", customerData.address || "-"],
     ];
-
+  
     autoTable(doc, {
       startY: yOffset,
       body: customerTableData,
@@ -663,13 +663,13 @@ const CurtainForm = () => {
       margin: { left: 10, right: 10 },
     });
     yOffset = doc.lastAutoTable.finalY + 10;
-
+  
     // Separator Line
     doc.setLineWidth(0.5);
     doc.setDrawColor(0, 102, 204);
     doc.line(10, yOffset, pageWidth - 10, yOffset);
     yOffset += 10;
-
+  
     // Room and Item Details
     rooms.forEach((room, index) => {
       const roomName = room.room === "Other" ? room.customRoom : room.room;
@@ -677,11 +677,11 @@ const CurtainForm = () => {
       doc.setFontSize(14);
       doc.text(`Room ${index + 1}: ${roomName || "Unnamed"}`, 10, yOffset);
       yOffset += 7;
-
+  
       const tableData = room.items.flatMap((item) => {
         const sellingPrice = parseFloat(item.formData.sellingPrice) || 0;
         totalSellingPrice += sellingPrice;
-
+  
         return item.type === "Accessories"
           ? [
               [
@@ -717,7 +717,7 @@ const CurtainForm = () => {
               ],
             ];
       });
-
+  
       autoTable(doc, {
         startY: yOffset,
         head: [["Type", "Style/Item", "Width/Unit", "Height Center", "Selling Price", "Remarks"]],
@@ -753,21 +753,21 @@ const CurtainForm = () => {
           }
         },
       });
-
+  
       yOffset = doc.lastAutoTable.finalY + 15;
-
+  
       if (yOffset > pageHeight - 40 && index < rooms.length - 1) {
         doc.addPage();
         yOffset = 20;
       }
     });
-
+  
     // Total Price
     doc.setFont("Playfair Display", "bold");
     doc.setFontSize(14);
     doc.text("Order Summary", 10, yOffset);
     yOffset += 7;
-
+  
     autoTable(doc, {
       startY: yOffset,
       body: [
@@ -797,9 +797,9 @@ const CurtainForm = () => {
         }
       },
     });
-
+  
     yOffset = doc.lastAutoTable.finalY + 20;
-
+  
     // Footer
     doc.setFont("Open Sans", "italic");
     doc.setFontSize(10);
@@ -818,33 +818,95 @@ const CurtainForm = () => {
       yOffset,
       { align: "center" }
     );
-
+  
+    return doc;
+  };
+  
+  const downloadPDF = () => {
+    const doc = generatePDF();
     doc.save("Curtain_Invoice.pdf");
   };
-
+  
   const printForm = () => {
-    const printContent = document.getElementById("curtain-form");
-    html2canvas(printContent).then((canvas) => {
-      const imgData = canvas.toDataURL("image/png");
+    Swal.fire({
+      title: "Preparing Print...",
+      text: "Please wait while the PDF is being generated.",
+      allowOutsideClick: false,
+      didOpen: () => {
+        Swal.showLoading();
+      },
+    });
+  
+    try {
+      const doc = generatePDF();
+      const pdfDataUrl = doc.output("datauristring");
       const printWindow = window.open("", "_blank");
+      if (!printWindow) {
+        Swal.fire({
+          icon: "error",
+          title: "Pop-Up Blocked",
+          text: "Unable to open print window. Please enable pop-ups for this site in your browser settings and try again.",
+        });
+        return;
+      }
+  
       printWindow.document.write(`
         <html>
           <head>
             <title>Print Curtain Measurement Form</title>
             <style>
-              body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; }
-              img { max-width: 100%; max-height: 100%; }
+              body { margin: 0; padding: 0; height: 100vh; overflow: hidden; }
+              iframe { width: 100%; height: 100%; border: none; }
             </style>
           </head>
           <body>
-            <img src="${imgData}" />
+            <iframe src="${pdfDataUrl}" onerror="window.handleIframeError();" onload="setTimeout(() => { window.print(); }, 500);"></iframe>
+            <script>
+              window.handleIframeError = () => {
+                window.opener.postMessage('iframe-error', '*');
+                window.close();
+              };
+            </script>
           </body>
         </html>
       `);
       printWindow.document.close();
-      printWindow.focus();
-      printWindow.print();
-    });
+  
+      // Handle iframe errors
+      window.addEventListener('message', (event) => {
+        if (event.data === 'iframe-error') {
+          Swal.fire({
+            icon: "error",
+            title: "Error",
+            text: "Failed to load PDF for printing. Please try again or contact support.",
+          });
+        }
+      }, { once: true });
+  
+      // Close the window after printing or canceling
+      printWindow.onbeforeprint = () => {
+        console.log("Printing started...");
+      };
+      printWindow.onafterprint = () => {
+        printWindow.close();
+      };
+  
+      // Fallback to close window if onafterprint doesn't fire
+      setTimeout(() => {
+        if (printWindow && !printWindow.closed) {
+          printWindow.close();
+        }
+      }, 30000); // 30 seconds fallback
+  
+      Swal.close();
+    } catch (error) {
+      console.error("Error generating PDF for print:", error);
+      Swal.fire({
+        icon: "error",
+        title: "Error",
+        text: "Failed to generate PDF for printing. Please try again or contact support.",
+      });
+    }
   };
 
   const TYPE_COLORS = {
